@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import re
 
@@ -21,7 +20,7 @@ class AnkiProvider:
 
         self._session = None
 
-    async def save_card(self, front: str, back: str):
+    async def save_card(self, front: str, back: str, tag='telegram') -> str:
         async with aiohttp.ClientSession(raise_for_status=True) as session:
             self._session = session
 
@@ -32,7 +31,7 @@ class AnkiProvider:
             csrf_token_form = await self.get_edit_form_csrf_token()
 
             data = 'nid=&' \
-                   f'data=%5B%5B%22{front}%22%2C%22{back}%22%5D%2C%22%22%5D&' \
+                   f'data=%5B%5B%22{front}%22%2C%22{back}%22%5D%2C%22{tag}%22%5D&' \
                    f'csrf_token={csrf_token_form}&' \
                    'mid=1650612674725&deck=1'
 
@@ -41,12 +40,12 @@ class AnkiProvider:
                 'cookie': f'ankiweb={self._login_cookie}'
             }
 
-            result = await self._request_save_card(data, headers)
+            (front, back), tag = await self._request_save_card(data, headers)
 
             self._session = None
 
-        logger.info(f"Card saved: {result}")
-        return result
+        logger.info(f"Card saved: {front} - {back}")
+        return f'{front} - {back}'
 
     async def login(self):
         login_csrf = await self.get_login_form_csrf_token()
@@ -82,9 +81,9 @@ class AnkiProvider:
         return login_form_csrf_token
 
     @backoff.on_exception(backoff.expo, (aiohttp.ClientResponseError,))
-    async def _request_save_card(self, data, headers):
+    async def _request_save_card(self, data, headers) -> str:
         async with self._session.post(url=self.SAVE_CARD_URL, data=data, headers=headers) as resp:
-            return await resp.text()
+            return await resp.json()
 
     async def _request(self, url: str, headers=None):
         if headers is None:
@@ -102,6 +101,4 @@ class AnkiProvider:
 
     async def _request_post(self, url: str, data: any, headers: dict):
         async with self._session.post(url, headers=headers, data=data) as resp:
-            a = await resp.text()
-            print(await resp.text())
-            return a
+            return await resp.text()
